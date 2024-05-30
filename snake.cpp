@@ -1,24 +1,19 @@
 #include <SFML/Graphics.hpp>
+#include <cstdio>
 #include <vector>
 #include <cstdlib>
 #include <ctime>
-
-const int WINDOW_WIDTH = 800;
-const int WINDOW_HEIGHT = 600;
-const int CELL_SIZE = 20;
-const int GAME_WIDTH = WINDOW_WIDTH / CELL_SIZE;
-const int GAME_HEIGHT = WINDOW_HEIGHT / CELL_SIZE;
-
-enum Direction { Up, Down, Left, Right };
-
-struct SnakeSegment {
-    int x, y;
-    SnakeSegment(int x, int y) : x(x), y(y) {}
-};
+#include <sstream>
+#include "snake.h"
 
 class Snake {
 public:
     Snake() {
+        reset();
+    }
+
+    void reset() {
+        segments.clear();
         segments.push_back(SnakeSegment(GAME_WIDTH / 2, GAME_HEIGHT / 2));
         direction = Direction::Right;
     }
@@ -55,22 +50,45 @@ public:
         }
     }
 
+    bool checkCollision() {
+        SnakeSegment head = segments.front();
+        if (head.x < 0 || head.x >= GAME_WIDTH || head.y < 0 || head.y >= GAME_HEIGHT)
+            return true;
+        for (size_t i = 1; i < segments.size(); ++i) {
+            if (head.x == segments[i].x && head.y == segments[i].y)
+                return true;
+        }
+        return false;
+    }
+
     std::vector<SnakeSegment> segments;
     Direction direction;
 };
 
 class Game {
 public:
-    Game() : window(sf::VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "Snake Game") {
-        window.setFramerateLimit(10);
+    Game() : window(sf::VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "Snake Game"), score(0), gameOver(false), frameRate(10) {
+        window.setFramerateLimit(frameRate);
         srand(time(0));
+
+        if (!font.loadFromFile("arial.ttf")) {
+            printf("Error loading font\n");
+        }
+        if (!snakeTexture.loadFromFile("snake.png")) {
+            printf("Error loading snake texture\n");
+        }
+        if (!foodTexture.loadFromFile("food.png")) {
+            printf("Error loading food texture\n");
+        }
         spawnFood();
     }
 
     void run() {
         while (window.isOpen()) {
             handleEvents();
-            update();
+            if (!gameOver) {
+                update();
+            }
             render();
         }
     }
@@ -87,6 +105,17 @@ private:
                     case sf::Keyboard::Down: snake.setDirection(Direction::Down); break;
                     case sf::Keyboard::Left: snake.setDirection(Direction::Left); break;
                     case sf::Keyboard::Right: snake.setDirection(Direction::Right); break;
+                    case sf::Keyboard::R:
+                        if (gameOver) {
+                            gameOver = false;
+                            score = 0;
+                            frameRate = 10;
+                            snake.reset();
+                            spawnFood();
+                            window.setFramerateLimit(frameRate);
+                        }
+                        break;
+                    default: break;
                 }
             }
         }
@@ -97,21 +126,40 @@ private:
         if (snake.segments.front().x == food.x && snake.segments.front().y == food.y) {
             snake.grow();
             spawnFood();
+            score++;
+            frameRate++;
+            window.setFramerateLimit(frameRate);
+        }
+        if (snake.checkCollision()) {
+            gameOver = true;
         }
     }
 
     void render() {
         window.clear();
-        for (auto &segment : snake.segments) {
-            sf::RectangleShape rectangle(sf::Vector2f(CELL_SIZE, CELL_SIZE));
-            rectangle.setFillColor(sf::Color::Green);
-            rectangle.setPosition(segment.x * CELL_SIZE, segment.y * CELL_SIZE);
-            window.draw(rectangle);
+        for (size_t i = 0; i < snake.segments.size(); ++i) {
+            sf::Sprite sprite;
+            sprite.setTexture(snakeTexture);
+            sprite.setPosition(snake.segments[i].x * CELL_SIZE, snake.segments[i].y * CELL_SIZE);
+            window.draw(sprite);
         }
-        sf::RectangleShape rectangle(sf::Vector2f(CELL_SIZE, CELL_SIZE));
-        rectangle.setFillColor(sf::Color::Red);
-        rectangle.setPosition(food.x * CELL_SIZE, food.y * CELL_SIZE);
-        window.draw(rectangle);
+        sf::Sprite foodSprite;
+        foodSprite.setTexture(foodTexture);
+        foodSprite.setPosition(food.x * CELL_SIZE, food.y * CELL_SIZE);
+        window.draw(foodSprite);
+
+        if (gameOver) {
+            sf::Text text("Game Over! Press 'R' to Restart", font, 20);
+            text.setFillColor(sf::Color::White);
+            text.setPosition(WINDOW_WIDTH / 4, WINDOW_HEIGHT / 2);
+            window.draw(text);
+        } else {
+            sf::Text text("Score: " + std::to_string(score), font, 20);
+            text.setFillColor(sf::Color::White);
+            text.setPosition(10, 10);
+            window.draw(text);
+        }
+
         window.display();
     }
 
@@ -123,6 +171,12 @@ private:
     sf::RenderWindow window;
     Snake snake;
     sf::Vector2i food;
+    sf::Font font;
+    sf::Texture snakeTexture;
+    sf::Texture foodTexture;
+    int score;
+    bool gameOver;
+    unsigned int frameRate;
 };
 
 int main() {
